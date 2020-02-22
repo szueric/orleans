@@ -24,7 +24,8 @@ namespace Orleans.Runtime
             Grain = 3,
             Client = 4,
             KeyExtGrain = 6,
-            GeoClient = 7,
+            // 7 was GeoClient 
+            KeyExtSystemTarget = 8,
         }
 
         public UInt64 N0 { get; private set; }
@@ -51,18 +52,16 @@ namespace Orleans.Runtime
         }
 
         public bool IsSystemTargetKey
-        {
-            get { return IdCategory == Category.SystemTarget; }
-        }
+            => IsSystemTarget(IdCategory);
 
-        public bool HasKeyExt
-        {
-            get {
-                var category = IdCategory;
-                return category == Category.KeyExtGrain       
-                    || category == Category.GeoClient; // geo clients use the KeyExt string to specify the cluster id
-            }
-        }
+        private static bool IsSystemTarget(Category category)
+            => category == Category.SystemTarget || category == Category.KeyExtSystemTarget;
+
+        public bool HasKeyExt => IsKeyExt(IdCategory);
+
+        private static bool IsKeyExt(Category category)
+            => category == Category.KeyExtGrain
+                        || category == Category.KeyExtSystemTarget;
 
         internal static readonly UniqueKey Empty =
             new UniqueKey
@@ -108,7 +107,7 @@ namespace Orleans.Runtime
 
         private static UniqueKey NewKey(ulong n0, ulong n1, Category category, long typeData, string keyExt)
         {
-            if (category != Category.KeyExtGrain && category != Category.GeoClient && keyExt != null)
+            if (!IsKeyExt(category) && keyExt != null)
                 throw new ArgumentException("Only key extended grains can specify a non-null key extension.");
 
             var typeCodeData = ((ulong)category << 56) + ((ulong)typeData & 0x00FFFFFFFFFFFFFF);
@@ -159,6 +158,11 @@ namespace Orleans.Runtime
             return NewKey(0, n1, Category.SystemTarget, typeData, null);
         }
 
+        public static UniqueKey NewGrainServiceKey(string key, long typeData)
+        {
+            return NewKey(0, 0, Category.KeyExtSystemTarget, typeData, key);
+        }
+
         internal static UniqueKey NewKey(ulong n0, ulong n1, ulong typeCodeData, string keyExt)
         {
             ValidateKeyExt(keyExt, typeCodeData);
@@ -180,7 +184,7 @@ namespace Orleans.Runtime
 
         private static void ThrowIfIsSystemTargetKey(Category category)
         {
-            if (category == Category.SystemTarget)
+            if (IsSystemTarget(category))
                 throw new ArgumentException(
                     "This overload of NewKey cannot be used to construct an instance of UniqueKey containing a SystemTarget id.");
         }
@@ -220,16 +224,6 @@ namespace Orleans.Runtime
             ThrowIfHasKeyExt("UniqueKey.PrimaryKeyToGuid");
             string unused;
             return PrimaryKeyToGuid(out unused);
-        }
-
-        public string ClusterId
-        {
-            get
-            {
-                if (IdCategory != Category.GeoClient)
-                    throw new InvalidOperationException("ClusterId is only defined for geo clients");
-                return this.KeyExt;
-            }
         }
 
         public override bool Equals(object o)
@@ -351,7 +345,7 @@ namespace Orleans.Runtime
         private static void ValidateKeyExt(string keyExt, UInt64 typeCodeData)
         {
             Category category = GetCategory(typeCodeData);
-            if (category == Category.KeyExtGrain)
+            if (category == Category.KeyExtGrain || category == Category.KeyExtSystemTarget)
             {
                 if (string.IsNullOrWhiteSpace(keyExt))
                 {
@@ -366,13 +360,9 @@ namespace Orleans.Runtime
                     }
                 }
             }
-            else if (category != Category.GeoClient && null != keyExt)
-            {
-                throw new ArgumentException("Extended key field is not null in non-extended UniqueIdentifier.");
-            }
         }
 
-        private static Category GetCategory(UInt64 typeCodeData)
+        internal static Category GetCategory(UInt64 typeCodeData)
         {
             return (Category)((typeCodeData >> 56) & 0xFF);
         }

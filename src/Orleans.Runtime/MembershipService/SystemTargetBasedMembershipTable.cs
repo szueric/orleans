@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orleans.Concurrency;
 using Orleans.Configuration;
+using Orleans.Internal;
 using Orleans.MultiCluster;
 using Orleans.Runtime.Providers;
 using Orleans.Serialization;
@@ -102,10 +103,14 @@ namespace Orleans.Runtime.MembershipService
         public Task<bool> UpdateRow(MembershipEntry entry, string etag, TableVersion tableVersion) => this.grain.UpdateRow(entry, etag, tableVersion);
 
         public Task UpdateIAmAlive(MembershipEntry entry) => this.grain.UpdateIAmAlive(entry);
+
+        public Task CleanupDefunctSiloEntries(DateTimeOffset beforeDate)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     [Reentrant]
-    [OneInstancePerCluster]
     internal class MembershipTableSystemTarget : SystemTarget, IMembershipTableSystemTarget
     {
         private InMemoryMembershipTable table;
@@ -175,6 +180,11 @@ namespace Orleans.Runtime.MembershipService
             if (logger.IsEnabled(LogLevel.Debug)) logger.Debug("UpdateIAmAlive entry = {0}", entry.ToFullString());
             table.UpdateIAmAlive(entry);
             return Task.CompletedTask;
+        }
+
+        public Task CleanupDefunctSiloEntries(DateTimeOffset beforeDate)
+        {
+            throw new NotImplementedException();
         }
     }
 }

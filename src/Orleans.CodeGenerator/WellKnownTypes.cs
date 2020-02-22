@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
 
@@ -19,6 +20,7 @@ namespace Orleans.CodeGenerator
                 CopierMethodAttribute = Type("Orleans.CodeGeneration.CopierMethodAttribute"),
                 DeserializerMethodAttribute = Type("Orleans.CodeGeneration.DeserializerMethodAttribute"),
                 Delegate = compilation.GetSpecialType(SpecialType.System_Delegate),
+                DebuggerStepThroughAttribute = Type("System.Diagnostics.DebuggerStepThroughAttribute"),
                 Exception = Type("System.Exception"),
                 ExcludeFromCodeCoverageAttribute = Type("System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute"),
                 FormatterServices = Type("System.Runtime.Serialization.FormatterServices"),
@@ -70,6 +72,7 @@ namespace Orleans.CodeGenerator
                 String = compilation.GetSpecialType(SpecialType.System_String),
                 Task = Type("System.Threading.Tasks.Task"),
                 Task_1 = Type("System.Threading.Tasks.Task`1"),
+                ValueTask = Type("System.Threading.Tasks.ValueTask"),
                 TimeSpan = Type("System.TimeSpan"),
                 IPAddress = Type("System.Net.IPAddress"),
                 IPEndPoint = Type("System.Net.IPEndPoint"),
@@ -101,6 +104,11 @@ namespace Orleans.CodeGenerator
                 KnownBaseTypeAttribute = Type("Orleans.CodeGeneration.KnownBaseTypeAttribute"),
                 ConsiderForCodeGenerationAttribute = Type("Orleans.CodeGeneration.ConsiderForCodeGenerationAttribute"),
                 OrleansCodeGenerationTargetAttribute = Type("Orleans.CodeGeneration.OrleansCodeGenerationTargetAttribute"),
+                SupportedRefAsmBaseTypes =
+                {
+                    Type("System.Collections.Generic.EqualityComparer`1"),
+                    Type("System.Collections.Generic.Comparer`1")
+                }
             };
 
             INamedTypeSymbol Type(string type)
@@ -138,6 +146,7 @@ namespace Orleans.CodeGenerator
             }
         }
 
+        public List<INamedTypeSymbol> SupportedRefAsmBaseTypes { get; } = new List<INamedTypeSymbol>();
         public IAssemblySymbol AbstractionsAssembly { get; private set; }
         public INamedTypeSymbol Attribute { get; private set; }
         public INamedTypeSymbol TimeSpan { get; private set; }
@@ -160,6 +169,7 @@ namespace Orleans.CodeGenerator
         public INamedTypeSymbol CopierMethodAttribute { get; private set; }
         public INamedTypeSymbol Delegate { get; private set; }
         public INamedTypeSymbol DeserializerMethodAttribute { get; private set; }
+        public INamedTypeSymbol DebuggerStepThroughAttribute { get; private set; }
         public INamedTypeSymbol Exception { get; private set; }
         public INamedTypeSymbol ExcludeFromCodeCoverageAttribute { get; private set; }
         public INamedTypeSymbol FormatterServices { get; private set; }
@@ -213,6 +223,7 @@ namespace Orleans.CodeGenerator
         public INamedTypeSymbol String { get; private set; }
         public INamedTypeSymbol Task { get; private set; }
         public INamedTypeSymbol Task_1 { get; private set; }
+        public INamedTypeSymbol ValueTask { get; private set; }
         public INamedTypeSymbol TransactionAttribute { get; private set; }
         public INamedTypeSymbol TransactionOption { get; private set; }
         public INamedTypeSymbol Type { get; private set; }

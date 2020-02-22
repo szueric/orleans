@@ -30,6 +30,7 @@ namespace Orleans.Storage
         private const string BINARY_STATE_PROPERTY_NAME = "BinaryState";
         private const string GRAIN_TYPE_PROPERTY_NAME = "GrainType";
         private const string ETAG_PROPERTY_NAME = "ETag";
+        private const string GRAIN_TTL_PROPERTY_NAME = "GrainTtl";
         private const string CURRENT_ETAG_ALIAS = ":currentETag";
 
         private readonly DynamoDBStorageOptions options;
@@ -77,6 +78,7 @@ namespace Orleans.Storage
                 this.jsonSettings = OrleansJsonSerializer.UpdateSerializerSettings(
                     OrleansJsonSerializer.GetDefaultSerializerSettings(this.typeResolver, this.grainFactory),
                     this.options.UseFullAssemblyNames, this.options.IndentJson, this.options.TypeNameHandling);
+                this.options.ConfigureJsonSerializerSettings?.Invoke(this.jsonSettings);
 
                 this.logger.LogInformation((int)ErrorCode.StorageProviderBase, $"AWS DynamoDB Grain Storage {this.name} is initializing: {initMsg}");
 
@@ -86,14 +88,16 @@ namespace Orleans.Storage
                 await storage.InitializeTable(this.options.TableName,
                     new List<KeySchemaElement>
                     {
-                    new KeySchemaElement { AttributeName = GRAIN_REFERENCE_PROPERTY_NAME, KeyType = KeyType.HASH },
-                    new KeySchemaElement { AttributeName = GRAIN_TYPE_PROPERTY_NAME, KeyType = KeyType.RANGE }
+                        new KeySchemaElement { AttributeName = GRAIN_REFERENCE_PROPERTY_NAME, KeyType = KeyType.HASH },
+                        new KeySchemaElement { AttributeName = GRAIN_TYPE_PROPERTY_NAME, KeyType = KeyType.RANGE }
                     },
                     new List<AttributeDefinition>
                     {
-                    new AttributeDefinition { AttributeName = GRAIN_REFERENCE_PROPERTY_NAME, AttributeType = ScalarAttributeType.S },
-                    new AttributeDefinition { AttributeName = GRAIN_TYPE_PROPERTY_NAME, AttributeType = ScalarAttributeType.S }
-                    });
+                        new AttributeDefinition { AttributeName = GRAIN_REFERENCE_PROPERTY_NAME, AttributeType = ScalarAttributeType.S },
+                        new AttributeDefinition { AttributeName = GRAIN_TYPE_PROPERTY_NAME, AttributeType = ScalarAttributeType.S }
+                    },
+                    secondaryIndexes: null,
+                    ttlAttributeName: this.options.TimeToLive.HasValue ? GRAIN_TTL_PROPERTY_NAME : null);
                 stopWatch.Stop();
                 this.logger.LogInformation((int)ErrorCode.StorageProviderBase,
                     $"Initializing provider {this.name} of type {this.GetType().Name} in stage {this.options.InitStage} took {stopWatch.ElapsedMilliseconds} Milliseconds.");
@@ -142,8 +146,8 @@ namespace Orleans.Storage
 
             if (record != null)
             {
-                var loadedState = ConvertFromStorageFormat(record);
-                grainState.State = loadedState ?? Activator.CreateInstance(grainState.State.GetType());
+                var loadedState = ConvertFromStorageFormat(record, grainState.Type);
+                grainState.State = loadedState ?? Activator.CreateInstance(grainState.Type);
                 grainState.ETag = record.ETag.ToString();
             }
 
@@ -182,6 +186,10 @@ namespace Orleans.Storage
         private async Task WriteStateInternal(IGrainState grainState, GrainStateRecord record, bool clear = false)
         {
             var fields = new Dictionary<string, AttributeValue>();
+            if (this.options.TimeToLive.HasValue)
+            {                                
+                fields.Add(GRAIN_TTL_PROPERTY_NAME, new AttributeValue { N = ((DateTimeOffset)DateTime.UtcNow.Add(this.options.TimeToLive.Value)).ToUnixTimeSeconds().ToString() });
+            }
 
             if (record.BinaryState != null && record.BinaryState.Length > 0)
             {
@@ -296,7 +304,7 @@ namespace Orleans.Storage
             return AWSUtils.ValidateDynamoDBPartitionKey(key);
         }
 
-        internal object ConvertFromStorageFormat(GrainStateRecord entity)
+        internal object ConvertFromStorageFormat(GrainStateRecord entity, Type stateType)
         {
             var binaryData = entity.BinaryState;
             var stringData = entity.StringState;
@@ -311,7 +319,7 @@ namespace Orleans.Storage
                 }
                 else if (!string.IsNullOrEmpty(stringData))
                 {
-                    dataValue = JsonConvert.DeserializeObject<object>(stringData, this.jsonSettings);
+                    dataValue = JsonConvert.DeserializeObject(stringData, stateType, this.jsonSettings);
                 }
 
                 // Else, no data found
@@ -377,8 +385,8 @@ namespace Orleans.Storage
     {
         public static IGrainStorage Create(IServiceProvider services, string name)
         {
-            IOptionsSnapshot<DynamoDBStorageOptions> optionsSnapshot = services.GetRequiredService<IOptionsSnapshot<DynamoDBStorageOptions>>();
-            return ActivatorUtilities.CreateInstance<DynamoDBGrainStorage>(services, optionsSnapshot.Get(name), name);
+            var optionsMonitor = services.GetRequiredService<IOptionsMonitor<DynamoDBStorageOptions>>();
+            return ActivatorUtilities.CreateInstance<DynamoDBGrainStorage>(services, optionsMonitor.Get(name), name);
         }
     }
 }

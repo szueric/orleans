@@ -22,8 +22,9 @@ namespace UnitTests.Serialization
 
         public OrleansJsonSerializerTests()
         {
-            var config = new ClientConfiguration { SerializationProviders = { typeof(OrleansJsonSerializer).GetTypeInfo() } };
-            this.environment = SerializationTestEnvironment.InitializeWithDefaults(config);
+            this.environment = SerializationTestEnvironment.InitializeWithDefaults(
+                builder => builder.Configure<SerializationProviderOptions>(
+                    options => options.SerializationProviders.Add(typeof(OrleansJsonSerializer))));
         }
 
         [Fact]
@@ -39,7 +40,7 @@ namespace UnitTests.Serialization
                 .Configure<ClusterOptions>(o => o.ClusterId = o.ServiceId = "s")
                 .UseLocalhostClustering()
                 .Configure<SerializationProviderOptions>(o =>
-                    o.SerializationProviders.Add(typeof(OrleansJsonSerializer).GetTypeInfo()))
+                    o.SerializationProviders.Add(typeof(OrleansJsonSerializer)))
                 .Build();
             var serializationManager = silo.Services.GetRequiredService<SerializationManager>();
             TestSerializationRoundTrip(serializationManager);

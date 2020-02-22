@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Orleans.CodeGeneration;
 using Orleans.Utilities;
@@ -63,6 +64,7 @@ namespace Orleans
         /// <returns>The mapped interface.</returns>
         private static Dictionary<int, Dictionary<int, Entry>> CreateInterfaceToImplementationMap(Type implementationType)
         {
+            var name = implementationType.Name;
             if (implementationType.IsConstructedGenericType) return CreateMapForConstructedGeneric(implementationType);
             return CreateMapForNonGeneric(implementationType);
         }
@@ -80,20 +82,37 @@ namespace Orleans
                     $"Type {implementationType} passed to {nameof(CreateMapForNonGeneric)} is a constructed generic type.");
             }
 
-            var implementationTypeInfo = implementationType.GetTypeInfo();
-            var interfaces = implementationType.GetInterfaces();
+            var concreteInterfaces = implementationType.GetInterfaces();
+            var interfaces = new List<(Type Concrete, Type Generic)>(concreteInterfaces.Length);
+            foreach (var iface in concreteInterfaces)
+            {
+                if (iface.IsConstructedGenericType)
+                {
+                    interfaces.Add((iface, iface.GetGenericTypeDefinition()));
+                }
+                else
+                {
+                    interfaces.Add((iface, null));
+                }
+            }
 
             // Create an invoker for every interface on the provided type.
-            var result = new Dictionary<int, Dictionary<int, Entry>>(interfaces.Length);
-            foreach (var iface in interfaces)
+            var result = new Dictionary<int, Dictionary<int, Entry>>(interfaces.Count);
+            var implementationTypeInfo = implementationType.GetTypeInfo();
+            foreach (var (iface, genericIface) in interfaces)
             {
                 var methods = GrainInterfaceUtils.GetMethods(iface);
+                var genericIfaceMethods = genericIface is object ? GrainInterfaceUtils.GetMethods(genericIface) : null;
 
                 // Map every method on this interface from the definition interface onto the implementation class.
                 var methodMap = new Dictionary<int, Entry>(methods.Length);
+                var genericInterfaceMethodMap = genericIface is object ? new Dictionary<int, Entry>(genericIfaceMethods.Length) : null;
+
                 var mapping = default(InterfaceMapping);
-                foreach (var method in methods)
+                for (var i = 0; i < methods.Length; i++)
                 {
+                    var method = methods[i];
+
                     // If this method is not from the expected interface (eg, because it's from a parent interface), then
                     // get the mapping for the interface which it does belong to.
                     if (mapping.InterfaceType != method.DeclaringType)
@@ -106,6 +125,12 @@ namespace Orleans
                     {
                         if (mapping.InterfaceMethods[k] != method) continue;
                         methodMap[GrainInterfaceUtils.ComputeMethodId(method)] = new Entry(mapping.TargetMethods[k], method);
+
+                        if (genericIface is object)
+                        {
+                            genericInterfaceMethodMap[GrainInterfaceUtils.ComputeMethodId(genericIfaceMethods[i])] = new Entry(mapping.TargetMethods[k], genericIfaceMethods[i]);
+                        }
+
                         break;
                     }
                 }
@@ -113,6 +138,12 @@ namespace Orleans
                 // Add the resulting map of methodId -> method to the interface map.
                 var interfaceId = GrainInterfaceUtils.GetGrainInterfaceId(iface);
                 result[interfaceId] = methodMap;
+
+                if (genericIface is object)
+                {
+                    var genericInterfaceId = GrainInterfaceUtils.GetGrainInterfaceId(genericIface);
+                    result[genericInterfaceId] = genericInterfaceMethodMap;
+                }
             }
 
             return result;
@@ -135,8 +166,6 @@ namespace Orleans
             }
 
             var genericClass = implementationType.GetGenericTypeDefinition();
-            var genericClassTypeInfo = genericClass.GetTypeInfo();
-            var implementationTypeInfo = implementationType.GetTypeInfo();
 
             var genericInterfaces = genericClass.GetInterfaces();
             var concreteInterfaces = implementationType.GetInterfaces();
@@ -161,8 +190,8 @@ namespace Orleans
                     var genericInterfaceMethod = genericMethods[j];
                     if (genericMap.InterfaceType != genericInterfaceMethod.DeclaringType)
                     {
-                        genericMap = genericClassTypeInfo.GetRuntimeInterfaceMap(genericInterfaceMethod.DeclaringType);
-                        concreteMap = implementationTypeInfo.GetRuntimeInterfaceMap(concreteInterfaceMethods[j].DeclaringType);
+                        genericMap = genericClass.GetTypeInfo().GetRuntimeInterfaceMap(genericInterfaceMethod.DeclaringType);
+                        concreteMap = implementationType.GetTypeInfo().GetRuntimeInterfaceMap(concreteInterfaceMethods[j].DeclaringType);
                     }
 
                     // Determine the position in the definition's map which the target method belongs to and take the implementation

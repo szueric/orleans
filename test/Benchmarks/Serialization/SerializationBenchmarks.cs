@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using BenchmarkDotNet.Attributes;
@@ -25,19 +25,21 @@ namespace Benchmarks.Serialization
     {
         private void InitializeSerializer(SerializerToUse serializerToUse)
         {
-            TypeInfo fallback = null;
+            Type fallback = null;
             switch (serializerToUse)
             {
                 case SerializerToUse.Default:
                     break;
                 case SerializerToUse.IlBasedFallbackSerializer:
-                    fallback = typeof(ILBasedSerializer).GetTypeInfo();
+#pragma warning disable CS0618 // Type or member is obsolete
+                    fallback = typeof(ILBasedSerializer);
+#pragma warning restore CS0618 // Type or member is obsolete
                     break;
                 case SerializerToUse.BinaryFormatterFallbackSerializer:
-                    fallback = typeof(BinaryFormatterSerializer).GetTypeInfo();
+                    fallback = typeof(BinaryFormatterSerializer);
                     break;
                 case SerializerToUse.ProtoBufNet:
-                    fallback = typeof(ProtobufNetSerializer).GetTypeInfo();
+                    fallback = typeof(ProtobufNetSerializer);
                     break;
                 default:
                     throw new InvalidOperationException("Invalid Serializer was selected");

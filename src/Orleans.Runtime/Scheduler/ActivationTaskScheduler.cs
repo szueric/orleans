@@ -10,7 +10,7 @@ namespace Orleans.Runtime.Scheduler
     /// A single-concurrency, in-order task scheduler for per-activation work scheduling.
     /// </summary>
     [DebuggerDisplay("ActivationTaskScheduler-{myId} RunQueue={workerGroup.WorkItemCount}")]
-    internal class ActivationTaskScheduler : TaskScheduler, ITaskScheduler
+    internal class ActivationTaskScheduler : TaskScheduler
     {
         private readonly ILogger logger;
 
@@ -34,10 +34,7 @@ namespace Orleans.Runtime.Scheduler
 
         /// <summary>Gets an enumerable of the tasks currently scheduled on this scheduler.</summary>
         /// <returns>An enumerable of the tasks currently scheduled.</returns>
-        protected override IEnumerable<Task> GetScheduledTasks()
-        {
-            return new Task[0];
-        }
+        protected override IEnumerable<Task> GetScheduledTasks() => this.workerGroup.GetScheduledTasks();
 
         public void RunTask(Task task)
         {
